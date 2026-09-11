@@ -1,0 +1,30 @@
+# Local credentials and encryption key
+/application/config/app-config.php
+/application/config/app-config.php.bak
+
+# Logs and cache
+/application/logs/*
+!/application/logs/index.html
+/application/cache/*
+!/application/cache/index.html
+!/application/cache/.htaccess
+
+# Temp
+/temp/*
+!/temp/index.html
+!/temp/.htaccess
+/temfile/
+
+# Uploads: keep folder structure, ignore uploaded files
+/uploads/**
+!/uploads/**/
+!/uploads/**/index.html
+!/uploads/**/.htaccess
+
+# Dependencies and OS
+/node_modules
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+yarn-error.log
