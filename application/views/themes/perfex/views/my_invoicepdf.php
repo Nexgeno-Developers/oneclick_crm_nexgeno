@@ -221,17 +221,17 @@ $right_label   = $swap == '1' ? 'COMPANY DETAILS' : strtoupper(_l('invoice_bill_
 $left_content  = $swap == '1' ? $client_info_html : $company_info;
 $right_content = $swap == '1' ? $company_info : $client_info_html;
 
-// Equal-height boxes sized to content only — same font as Bank Details
+// Equal-height boxes sized to content only
 $info_boxes = '<table cellpadding="6" cellspacing="0" style="width:100%; border-collapse:collapse;">';
 $info_boxes .= '<tr>';
-$info_boxes .= '<td width="48.5%" bgcolor="' . $brand . '" style="font-size:10px; color:#fff; background-color:' . $brand . ';"><b>' . $left_label . '</b></td>';
+$info_boxes .= '<td width="48.5%" bgcolor="' . $brand . '" style="font-size:11px; color:#fff; background-color:' . $brand . ';"><b>' . $left_label . '</b></td>';
 $info_boxes .= '<td width="3%"></td>';
-$info_boxes .= '<td width="48.5%" bgcolor="' . $brand . '" style="font-size:10px; color:#fff; background-color:' . $brand . ';"><b>' . $right_label . '</b></td>';
+$info_boxes .= '<td width="48.5%" bgcolor="' . $brand . '" style="font-size:11px; color:#fff; background-color:' . $brand . ';"><b>' . $right_label . '</b></td>';
 $info_boxes .= '</tr>';
 $info_boxes .= '<tr>';
-$info_boxes .= '<td width="48.5%" bgcolor="' . $brand_light . '" style="font-size:9px; line-height:14px; color:#000; background-color:' . $brand_light . ';">' . $left_content . '</td>';
+$info_boxes .= '<td width="48.5%" bgcolor="' . $brand_light . '" style="font-size:11px; line-height:16px; color:#000; background-color:' . $brand_light . ';">' . $left_content . '</td>';
 $info_boxes .= '<td width="3%"></td>';
-$info_boxes .= '<td width="48.5%" bgcolor="' . $brand_light . '" style="font-size:9px; line-height:14px; color:#000; background-color:' . $brand_light . ';">' . $right_content . '</td>';
+$info_boxes .= '<td width="48.5%" bgcolor="' . $brand_light . '" style="font-size:11px; line-height:16px; color:#000; background-color:' . $brand_light . ';">' . $right_content . '</td>';
 $info_boxes .= '</tr>';
 $info_boxes .= '</table>';
 
