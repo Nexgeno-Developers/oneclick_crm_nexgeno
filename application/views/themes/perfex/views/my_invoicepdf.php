@@ -210,6 +210,24 @@ if ($invoice->include_shipping == 1 && $invoice->show_shipping_on_invoice == 1) 
     $client_info_html .= '<br /><b>' . _l('ship_to') . ':</b><br />';
     $client_info_html .= format_customer_info($invoice, 'invoice', 'shipping');
 }
+
+// Primary contact phone & email on Bill To
+$primary_contact_id = get_primary_contact_user_id($invoice->clientid);
+if ($primary_contact_id) {
+    $CI = &get_instance();
+    $CI->db->select('email, phonenumber');
+    $CI->db->where('id', $primary_contact_id);
+    $primary_contact = $CI->db->get(db_prefix() . 'contacts')->row();
+    if ($primary_contact) {
+        if (!empty($primary_contact->phonenumber)) {
+            $client_info_html .= '<br /><b>Phone:</b> ' . $primary_contact->phonenumber;
+        }
+        if (!empty($primary_contact->email)) {
+            $client_info_html .= '<br /><b>Email:</b> ' . $primary_contact->email;
+        }
+    }
+}
+
 $client_info_html = preg_replace('/(<br\s*\/?>\s*)+/i', '<br />', trim($client_info_html));
 $client_info_html = preg_replace('/(<br\s*\/?>\s*)+$/i', '', $client_info_html);
 
