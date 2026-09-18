@@ -32,7 +32,11 @@ if (!function_exists('oneclick_pdf_prepare_image')) {
      */
     function oneclick_pdf_prepare_image($path, $preserve_alpha = false)
     {
-        if (empty($path) || !file_exists($path) || !extension_loaded('gd')) {
+        if (empty($path) || !file_exists($path)) {
+            return '';
+        }
+
+        if (!extension_loaded('gd')) {
             return $path;
         }
 
@@ -161,26 +165,33 @@ if (!function_exists('oneclick_pdf_prepare_image')) {
 $scanner_src   = oneclick_pdf_prepare_image($scanner_path);
 $stamp_src     = oneclick_pdf_prepare_image($stamp_path, true);
 $signature_src = oneclick_pdf_prepare_image($signature_path, true);
+// Prefer original assets on disk (more reliable on shared hosting than /tmp)
+if (file_exists($scanner_path)) {
+    $scanner_src = $scanner_path;
+}
+if ($stamp_src == '' && file_exists($stamp_path)) {
+    $stamp_src = $stamp_path;
+}
+if ($signature_src == '' && file_exists($signature_path)) {
+    $signature_src = $signature_path;
+}
 
-// Prefer trimmed local logo so top aligns with invoice details
-$logo_html = '';
-$companyUploadPath = get_upload_path_by_type('company');
+// Company logo — draw with Image() (HTML <img> fails on many prod hosts)
 $logo_file = '';
+$companyUploadPath = get_upload_path_by_type('company');
 if (get_option('company_logo_dark') != '' && file_exists($companyUploadPath . get_option('company_logo_dark'))) {
     $logo_file = $companyUploadPath . get_option('company_logo_dark');
 } elseif (get_option('company_logo') != '' && file_exists($companyUploadPath . get_option('company_logo'))) {
     $logo_file = $companyUploadPath . get_option('company_logo');
 }
-$logo_src = oneclick_pdf_prepare_image($logo_file);
-$logo_w   = get_option('pdf_logo_width');
-if ($logo_w == '' || (int) $logo_w > 130) {
-    $logo_w = 120;
+$logo_w_mm = (float) get_option('pdf_logo_width');
+if ($logo_w_mm <= 0 || $logo_w_mm > 55) {
+    $logo_w_mm = 42; // ~120px equivalent in mm for TCPDF Image()
+} elseif ($logo_w_mm > 70) {
+    // Option is stored as px in Perfex — convert roughly to mm
+    $logo_w_mm = min(50, $logo_w_mm * 0.35);
 }
-if ($logo_src != '') {
-    $logo_html = '<img width="' . (int) $logo_w . 'px" src="' . $logo_src . '" />';
-} else {
-    $logo_html = pdf_logo_url();
-}
+
 $invoice_title = _l('invoice_pdf_heading');
 
 $info_right = '<div style="text-align:right; color:#000; line-height:16px;">';
@@ -211,17 +222,29 @@ foreach ($pdf_custom_fields as $field) {
 }
 $info_right .= '</div>';
 
-// Top-align logo and invoice details on the same row
-$left_html  = $swap == '1' ? $info_right : $logo_html;
-$right_html = $swap == '1' ? $logo_html : $info_right;
+$header_start_y = $pdf->getY();
+$half_w         = $available_width / 2;
 
-$header_html = '<table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">';
-$header_html .= '<tr>';
-$header_html .= '<td width="50%" style="vertical-align:top;">' . $left_html . '</td>';
-$header_html .= '<td width="50%" style="vertical-align:top; text-align:right;">' . $right_html . '</td>';
-$header_html .= '</tr></table>';
+if ($swap == '1') {
+    $pdf->writeHTMLCell($half_w, '', $dimensions['lm'], $header_start_y, $info_right, 0, 0, false, true, 'L', true);
+    if ($logo_file != '' && file_exists($logo_file)) {
+        $pdf->Image($logo_file, $dimensions['lm'] + $half_w + 5, $header_start_y, $logo_w_mm, 0, '', '', '', false, 300, '', false, false, 0);
+    }
+} else {
+    if ($logo_file != '' && file_exists($logo_file)) {
+        $pdf->Image($logo_file, $dimensions['lm'], $header_start_y, $logo_w_mm, 0, '', '', '', false, 300, '', false, false, 0);
+    }
+    $pdf->writeHTMLCell($half_w, '', $dimensions['lm'] + $half_w, $header_start_y, $info_right, 0, 0, false, true, 'R', true);
+}
 
-$pdf->writeHTML($header_html, true, false, false, false, '');
+$logo_h_mm = 18;
+if ($logo_file != '' && file_exists($logo_file)) {
+    $logo_size = @getimagesize($logo_file);
+    if ($logo_size && !empty($logo_size[0]) && !empty($logo_size[1])) {
+        $logo_h_mm = ($logo_w_mm / $logo_size[0]) * $logo_size[1];
+    }
+}
+$pdf->SetY(max($pdf->getY(), $header_start_y + $logo_h_mm + 2));
 $pdf->Ln(3);
 
 // Build compact company block — background ends just after email
@@ -257,10 +280,7 @@ $company_lines[] = '<b>Email:</b> ' . $company_email . ' &nbsp;&nbsp; <b>Web:</b
 $company_info = implode('<br />', $company_lines);
 
 $client_info_html = format_customer_info($invoice, 'invoice', 'billing');
-if ($invoice->include_shipping == 1 && $invoice->show_shipping_on_invoice == 1) {
-    $client_info_html .= '<br /><b>' . _l('ship_to') . ':</b><br />';
-    $client_info_html .= format_customer_info($invoice, 'invoice', 'shipping');
-}
+// Shipping address intentionally omitted from PDF
 
 // Primary contact phone & email on Bill To
 $primary_contact_id = get_primary_contact_user_id($invoice->clientid);
@@ -385,9 +405,8 @@ $tbltotal .= '</table>';
 
 $scanner_html = '<table cellpadding="3" cellspacing="0" style="width:100%; text-align:center;">';
 $scanner_html .= '<tr><td style="font-size:10px; color:#000;"><b>SCAN TO PAY</b></td></tr>';
-if ($scanner_src != '') {
-    $scanner_html .= '<tr><td><img src="' . $scanner_src . '" width="88" /></td></tr>';
-}
+// Reserve space for QR — drawn with $pdf->Image() (HTML img often fails on prod)
+$scanner_html .= '<tr><td style="height:90px;">&nbsp;</td></tr>';
 $scanner_html .= '<tr><td style="font-size:9px;"><b>UPI ID</b><br />' . $upi_id . '</td></tr>';
 $scanner_html .= '</table>';
 
@@ -450,29 +469,18 @@ if (count($invoice->payments) > 0 && get_option('show_transactions_on_invoice_pd
     $pdf->writeHTML($payhtml, true, false, false, false, '');
 }
 
-if (found_invoice_mode($payment_modes, $invoice->id, true, true)) {
-    $pdf->Ln(3);
-    $pdf->SetFont($font_name, 'B', $font_size);
-    $pdf->Cell(0, 0, _l('invoice_html_offline_payment') . ':', 0, 1, 'L', 0, '', 0);
-    $pdf->SetFont($font_name, '', $font_size);
+// Skip Perfex offline payment modes — bank details are already in the custom BANK DETAILS box
 
-    foreach ($payment_modes as $mode) {
-        if (is_numeric($mode['id'])) {
-            if (!is_payment_mode_allowed_for_invoice($mode['id'], $invoice->id)) {
-                continue;
-            }
-        }
-        if (isset($mode['show_on_pdf']) && $mode['show_on_pdf'] == 1) {
-            $pdf->Ln(1);
-            $pdf->Cell(0, 0, $mode['name'], 0, 1, 'L', 0, '', 0);
-            $pdf->Ln(1);
-            $pdf->writeHTMLCell('', '', '', '', $mode['description'], 0, 1, false, true, 'L', true);
-        }
-    }
-}
+$default_terms = "CASH CHEQUE CHEQUE VERY IMP. : Payment to be made to the cashier & printed Official Receipt must be obtained.<br />"
+    . ": All cheques / demand drafts in payment of bills must be crossed 'A/c Payee Only'<br />"
+    . ": and drawn in favour of 'ONE CLICK TRAVEL'.<br />"
+    . "LATE PAYMENT : Interest @ 24% per annum will be charged on all outstanding bills after due date.<br />"
+    . ": Kindly check all details carefully to avoid un-necessary complications.";
 
 $terms = !empty($invoice->terms) ? $invoice->terms : get_option('predefined_terms_invoice');
-if (!empty($terms) && strip_tags($terms) === $terms) {
+if (trim(strip_tags((string) $terms)) == '') {
+    $terms = $default_terms;
+} elseif (strip_tags($terms) === $terms) {
     $terms = nl2br($terms);
 }
 
@@ -501,6 +509,16 @@ if ($pdf->getY() > ($block_start - 2)) {
 $pdf->SetAutoPageBreak(false);
 $pdf->SetY($block_start);
 $pdf->writeHTML($payment_row, true, false, false, false, '');
+
+// Draw QR with Image() — same method as stamp (works on prod; HTML <img> often does not)
+if ($scanner_src != '' && file_exists($scanner_src)) {
+    $scanner_col_x = $dimensions['lm'] + ($available_width * 0.42);
+    $scanner_col_w = $available_width * 0.22;
+    $scanner_img_w = 22;
+    $scanner_img_x = $scanner_col_x + (($scanner_col_w - $scanner_img_w) / 2);
+    $scanner_img_y = $block_start + 6;
+    $pdf->Image($scanner_src, $scanner_img_x, $scanner_img_y, $scanner_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+}
 
 if (get_option('total_to_words_enabled') == 1) {
     $pdf->SetFont($font_name, 'B', $font_size);
