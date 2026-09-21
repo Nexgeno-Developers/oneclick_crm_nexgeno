@@ -405,9 +405,8 @@ $tbltotal .= '</table>';
 
 $scanner_html = '<table cellpadding="3" cellspacing="0" style="width:100%; text-align:center;">';
 $scanner_html .= '<tr><td style="font-size:10px; color:#000;"><b>SCAN TO PAY</b></td></tr>';
-// Reserve space for QR — drawn with $pdf->Image() (HTML img often fails on prod)
-$scanner_html .= '<tr><td style="height:90px;">&nbsp;</td></tr>';
-$scanner_html .= '<tr><td style="font-size:9px;"><b>UPI ID</b><br />' . $upi_id . '</td></tr>';
+// Reserve space for QR + UPI label — both drawn after writeHTML (HTML img often fails on prod)
+$scanner_html .= '<tr><td style="height:110px;">&nbsp;</td></tr>';
 $scanner_html .= '</table>';
 
 $bank_html = '<table cellpadding="6" cellspacing="0" style="width:100%; background-color:' . $brand_light . '; border-collapse:collapse;">';
@@ -439,35 +438,7 @@ if (!empty($invoice->clientnote)) {
     $pdf->writeHTMLCell('', '', '', '', $invoice->clientnote, 0, 1, false, true, 'L', true);
 }
 
-if (count($invoice->payments) > 0 && get_option('show_transactions_on_invoice_pdf') == 1) {
-    $pdf->Ln(4);
-    $line = 'border-bottom-color:#000000;border-bottom-width:1px;border-bottom-style:solid;';
-    $pdf->SetFont($font_name, 'B', $font_size);
-    $pdf->Cell(0, 0, _l('invoice_received_payments') . ':', 0, 1, 'L', 0, '', 0);
-    $pdf->SetFont($font_name, '', $font_size);
-    $pdf->Ln(2);
-    $payhtml = '<table width="100%" cellspacing="0" cellpadding="5" border="0">
-        <tr style="color:#000;">
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_number_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_mode_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_date_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_amount_heading') . '</th>
-    </tr>';
-    foreach ($invoice->payments as $payment) {
-        $payment_name = $payment['name'];
-        if (!empty($payment['paymentmethod'])) {
-            $payment_name .= ' - ' . $payment['paymentmethod'];
-        }
-        $payhtml .= '<tr>
-            <td>' . $payment['paymentid'] . '</td>
-            <td>' . $payment_name . '</td>
-            <td>' . _d($payment['date']) . '</td>
-            <td>' . app_format_money($payment['amount'], $invoice->currency_name) . '</td>
-        </tr>';
-    }
-    $payhtml .= '</table>';
-    $pdf->writeHTML($payhtml, true, false, false, false, '');
-}
+// Transactions / payments table intentionally omitted from invoice PDF
 
 // Skip Perfex offline payment modes — bank details are already in the custom BANK DETAILS box
 
@@ -495,7 +466,7 @@ $sign_gap   = $available_width * 0.02;
 $col_w      = $sign_w / 2;
 $stamp_w    = 18;
 $sign_img_w = 16;
-$payment_block_h = 42;
+$payment_block_h = 46;
 $terms_block_h   = 34;
 $gap_between     = 1.5;
 $bottom_pad      = 3;
@@ -510,15 +481,28 @@ $pdf->SetAutoPageBreak(false);
 $pdf->SetY($block_start);
 $pdf->writeHTML($payment_row, true, false, false, false, '');
 
-// Draw QR with Image() — same method as stamp (works on prod; HTML <img> often does not)
+// Draw QR + UPI ID with Image()/Cell — avoids HTML overlap (works on prod)
+$y_after_payment = $pdf->getY();
+$scanner_col_x = $dimensions['lm'] + ($available_width * 0.42);
+$scanner_col_w = $available_width * 0.22;
+$scanner_img_w = 20;
+$scanner_img_x = $scanner_col_x + (($scanner_col_w - $scanner_img_w) / 2);
+$scanner_img_y = $block_start + 5.5;
 if ($scanner_src != '' && file_exists($scanner_src)) {
-    $scanner_col_x = $dimensions['lm'] + ($available_width * 0.42);
-    $scanner_col_w = $available_width * 0.22;
-    $scanner_img_w = 22;
-    $scanner_img_x = $scanner_col_x + (($scanner_col_w - $scanner_img_w) / 2);
-    $scanner_img_y = $block_start + 6;
     $pdf->Image($scanner_src, $scanner_img_x, $scanner_img_y, $scanner_img_w, 0, '', '', '', false, 300, '', false, false, 0);
 }
+$upi_label_y = $scanner_img_y + $scanner_img_w + 1.5;
+$pdf->SetXY($scanner_col_x, $upi_label_y);
+$pdf->SetFont($font_name, 'B', 8);
+$pdf->Cell($scanner_col_w, 3.5, 'UPI ID', 0, 2, 'C', false, '', 0, false, 'T', 'M');
+// Wider than QR column + slight scale so full UPI stays on one line
+$upi_text_w = $scanner_col_w + 16;
+$upi_text_x = $scanner_col_x + (($scanner_col_w - $upi_text_w) / 2);
+$pdf->SetFont($font_name, '', 6.5);
+$pdf->SetXY($upi_text_x, $pdf->getY());
+$pdf->Cell($upi_text_w, 3.2, $upi_id, 0, 1, 'C', false, '', 1);
+$pdf->SetY($y_after_payment);
+$pdf->SetFont($font_name, '', $font_size);
 
 if (get_option('total_to_words_enabled') == 1) {
     $pdf->SetFont($font_name, 'B', $font_size);
