@@ -522,22 +522,22 @@ $sign_x = $dimensions['lm'] + $terms_w + $sign_gap;
 
 $pdf->writeHTMLCell($terms_w, '', $dimensions['lm'], $footer_y, $terms_html, 0, 0, false, true, 'LT', true);
 
-// Single approval block: stamp + signature, then Sameer Khan
+// Single approval block: signature then stamp, then Sameer Khan
 $pdf->SetXY($sign_x, $footer_y);
 $pdf->SetFont($font_name, 'B', 6.5);
 $pdf->MultiCell($sign_w, 3.2, 'CHECKED AND APPROVED BY', 0, 'C', false, 1);
 
 $img_y = $pdf->getY() + 0.5;
-// Side by side, very close
+// Side by side, very close: signature then stamp
 $pair_gap = 1;
-$pair_w   = $stamp_w + $pair_gap + $sign_img_w;
+$pair_w   = $sign_img_w + $pair_gap + $stamp_w;
 $pair_x   = $sign_x + (($sign_w - $pair_w) / 2);
 
-if ($stamp_src != '' && file_exists($stamp_src)) {
-    $pdf->Image($stamp_src, $pair_x, $img_y, $stamp_w, 0, '', '', '', false, 300, '', false, false, 0);
-}
 if ($signature_src != '' && file_exists($signature_src)) {
-    $pdf->Image($signature_src, $pair_x + $stamp_w + $pair_gap, $img_y + 1.5, $sign_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+    $pdf->Image($signature_src, $pair_x, $img_y + 1.5, $sign_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+}
+if ($stamp_src != '' && file_exists($stamp_src)) {
+    $pdf->Image($stamp_src, $pair_x + $sign_img_w + $pair_gap, $img_y, $stamp_w, 0, '', '', '', false, 300, '', false, false, 0);
 }
 
 $name_y = $img_y + max($stamp_w, 12) + 1;
@@ -548,3 +548,41 @@ $pdf->SetX($sign_x);
 $pdf->SetFont($font_name, '', 6.5);
 $pdf->Cell($sign_w, 3, 'Managing Director', 0, 1, 'C', false);
 $pdf->SetFont($font_name, '', $font_size);
+
+// Watermark: company logo enlarged in the center of each page with transparency
+if ($logo_file != '' && file_exists($logo_file)) {
+    $wm_w = 115;
+    $logo_size = @getimagesize($logo_file);
+    if (!empty($logo_size[0]) && !empty($logo_size[1])) {
+        $aspect = $logo_size[0] / $logo_size[1];
+        if ($aspect < 0.8) {
+            $wm_h = 100;
+            $wm_w = $wm_h * $aspect;
+        } else {
+            $wm_w = 115;
+            $wm_h = $wm_w / $aspect;
+        }
+    } else {
+        $wm_w = 115;
+        $wm_h = 35;
+    }
+
+    $num_pages = $pdf->getNumPages();
+    $orig_page = $pdf->getPage();
+
+    for ($p = 1; $p <= $num_pages; $p++) {
+        $pdf->setPage($p);
+        $p_dim = $pdf->getPageDimensions();
+        $p_w   = $p_dim['wk'];
+        $p_h   = $p_dim['hk'];
+        $wm_x  = ($p_w - $wm_w) / 2;
+        $wm_y  = ($p_h - $wm_h) / 2;
+
+        $pdf->SetAlpha(0.10);
+        $pdf->Image($logo_file, $wm_x, $wm_y, $wm_w, $wm_h, '', '', '', false, 300, '', false, false, 0);
+        $pdf->SetAlpha(1.0);
+    }
+
+    $pdf->setPage($orig_page);
+}
+
