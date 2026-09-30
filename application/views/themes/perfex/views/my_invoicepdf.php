@@ -325,7 +325,8 @@ $info_boxes .= '</tr>';
 $info_boxes .= '</table>';
 
 $pdf->writeHTML($info_boxes, true, false, false, false, '');
-$pdf->Ln(4);
+// Reduce space between customer detail boxes and items table header
+$pdf->SetY($pdf->getY() - 1.5);
 
 $items   = get_items_table_data($invoice, 'invoice', 'pdf');
 $tblhtml = $items->table();
@@ -337,8 +338,85 @@ $heading_text = get_option('pdf_table_heading_text_color');
 if (!empty($heading_text)) {
     $tblhtml = str_replace('color:' . $heading_text, 'color:#ffffff', $tblhtml);
 }
-$pdf->writeHTML($tblhtml, true, false, false, false, '');
-$pdf->Ln(4);
+
+// Add white column separator lines between header cells, with black borders on outer left (#) and outer right (Amount)
+$tblhtml = preg_replace('/<th\b([^>]*)>/i', '<th$1 style="border-right:1px solid #ffffff;">', $tblhtml);
+$tblhtml = preg_replace('/style="([^"]*)"\s+style="([^"]*)"/i', 'style="$1 $2"', $tblhtml);
+$tblhtml = preg_replace('/(<tr\b[^>]*>\s*<th\b[^>]*\bstyle=")/i', '${1}border-left:1px solid #000000; ', $tblhtml);
+$tblhtml = preg_replace('/(<th\b[^>]*\bstyle="[^"]*border-right:\s*1px\s+solid\s+)#ffffff([^"]*"[^>]*>(?:(?!<th).)*?<\/th>\s*<\/tr>)/is', '${1}#000000${2}', $tblhtml);
+
+// Extend last column (Amount) so total column widths equal 100% (Perfex defaults sum to 99%)
+preg_match_all('/<th\b[^>]*width=["\']([0-9.]+)[^"\']*["\']/i', $tblhtml, $w_matches);
+if (!empty($w_matches[1])) {
+    $total_w = array_sum($w_matches[1]);
+    if ($total_w > 0 && $total_w < 100) {
+        $diff = 100 - $total_w;
+        $last_w = (float) end($w_matches[1]);
+        $new_last_w = $last_w + $diff;
+
+        $tblhtml = preg_replace('/(<th\b[^>]*\bwidth=["\'])([0-9.]+)[^"\']*([\'"][^>]*>(?:(?!<th).)*?<\/th>\s*<\/tr>)/is', '${1}' . $new_last_w . '%${3}', $tblhtml);
+        $tblhtml = preg_replace('/(<td\b[^>]*\bwidth=["\'])([0-9.]+)[^"\']*([\'"][^>]*>(?:(?!<td).)*?<\/td>\s*<\/tr>)/is', '${1}' . $new_last_w . '%${3}', $tblhtml);
+    }
+}
+
+// Add black vertical column lines to body cells (without horizontal row border lines)
+$tblhtml = preg_replace('/<td\b([^>]*)>/i', '<td$1 style="border-right:1px solid #000000;">', $tblhtml);
+$tblhtml = preg_replace('/style="([^"]*)"\s+style="([^"]*)"/i', 'style="$1 $2"', $tblhtml);
+$tblhtml = preg_replace('/(<tr\b[^>]*>\s*<td\b[^>]*\bstyle=")/i', '${1}border-left:1px solid #000000; ', $tblhtml);
+
+// Add left and right outer borders to the table
+$tblhtml = str_replace('<table ', '<table style="border-collapse:collapse; border-left:1px solid #000000; border-right:1px solid #000000;" ', $tblhtml);
+
+// Set line style and draw color to solid black before rendering table
+$pdf->SetDrawColor(0, 0, 0);
+$pdf->SetLineStyle([
+    'width' => 0.25,
+    'cap'   => 'butt',
+    'join'  => 'miter',
+    'dash'  => 0,
+    'color' => [0, 0, 0],
+]);
+
+// Render the unified table with ln=false so headers repeat on page breaks and stops at exact bottom of cells
+$start_page = $pdf->getPage();
+$pdf->writeHTML($tblhtml, false, false, false, false, '');
+$items_end_y = $pdf->getY();
+$end_page    = $pdf->getPage();
+
+// Extract column widths from thead (robust to Perfex's 5%; semicolon formatting)
+preg_match_all('/<th\b[^>]*width=["\']([0-9.]+)[^"\']*["\']/i', $tblhtml, $matches);
+$col_x = [];
+$cur_x = $dimensions['lm'];
+$col_x[] = $cur_x;
+if (!empty($matches[1])) {
+    foreach ($matches[1] as $w) {
+        $cur_x += ($available_width * ((float)$w / 100));
+        $col_x[] = $cur_x;
+    }
+}
+$col_x[count($col_x) - 1] = $dimensions['lm'] + $available_width;
+
+$payment_block_h = 46;
+$terms_block_h   = 34;
+$gap_between     = 1.5;
+$bottom_pad      = 3;
+$page_h          = $pdf->getPageHeight();
+$block_start     = $page_h - $payment_block_h - $gap_between - $terms_block_h - $bottom_pad;
+$note_reserve    = !empty($invoice->clientnote) ? 14 : 0;
+$target_bottom_y = $block_start - $note_reserve - 3;
+
+// If table ends above Bank Details, extend column lines down to just above Bank Details
+if ($items_end_y < $target_bottom_y) {
+    foreach ($col_x as $x) {
+        $pdf->Line($x, $items_end_y, $x, $target_bottom_y);
+    }
+    $pdf->Line($dimensions['lm'], $target_bottom_y, $dimensions['lm'] + $available_width, $target_bottom_y);
+    $pdf->SetY($target_bottom_y);
+} else {
+    // Multi-page or full page: close table with the bottom horizontal line
+    $pdf->Line($dimensions['lm'], $items_end_y, $dimensions['lm'] + $available_width, $items_end_y);
+    $pdf->SetY($items_end_y);
+}
 
 $tbltotal = '<table cellpadding="5" cellspacing="0" style="font-size:' . ($font_size + 3) . 'px; border-collapse:collapse;">';
 $tbltotal .= '<tr>
