@@ -1,0 +1,12 @@
+{
+  "mcpServers": {
+    "whatsapp_business_tools": {
+      "command": "npx.cmd",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://mcp.facebook.com/whatsapp_business_tools"
+      ]
+    }
+  }
+}

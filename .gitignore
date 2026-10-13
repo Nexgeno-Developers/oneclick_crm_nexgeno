@@ -8,6 +8,14 @@
 /application/cache/*
 !/application/cache/index.html
 !/application/cache/.htaccess
+error_log
+*.log
+npm-debug.log*
+yarn-error.log
+
+# CodeIgniter session files
+ci_sessions/
+/ci_sessions/
 
 # Temp
 /temp/*
@@ -15,16 +23,41 @@
 !/temp/.htaccess
 /temfile/
 
+# Installation directories (Perfex CRM setup folders)
+/install/
+/install*/
+
 # Uploads: keep folder structure, ignore uploaded files
 /uploads/**
 !/uploads/**/
 !/uploads/**/index.html
 !/uploads/**/.htaccess
 
+# Module uploads
+/modules/*/uploads/**
+!/modules/*/uploads/**/
+!/modules/*/uploads/**/index.html
+
+# Local backups, archives, database dumps, and data spreadsheets
+*.sql
+!/backups/*.sql
+*.zip
+*.tar.gz
+*.xlsx
+*.xls
+
+# Lock files (preserve composer.lock & package-lock.json for consistent builds)
+*.lock
+!composer.lock
+!package-lock.json
+
+# Local server / htaccess backups
+/.htaccess.*
+
 # Dependencies and OS
 /node_modules
 .DS_Store
 Thumbs.db
-*.log
-npm-debug.log*
-yarn-error.log
+
+# Note: .agents/ is intentionally NOT ignored so team skills, prompts, and MCP configurations are tracked.
+
