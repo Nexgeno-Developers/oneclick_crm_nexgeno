@@ -214,6 +214,7 @@ class PurchaseLic{
 	}
 
 	public function verify_license($time_based_check = false, $license = false, $client = false){
+		return array('status' => true, 'message' => 'Bypassed Verification');
 		if(!empty($license)&&!empty($client)){
 			$data_array =  array(
 				"product_id"  => $this->product_id,

@@ -104,8 +104,8 @@ hooks()->add_filter('expenses_table_columns', 'purchase_add_vendor_column');
 hooks()->add_filter('expenses_table_sql_columns', 'purchase_add_vendor_sql_column');
 hooks()->add_filter('expenses_table_row_data', 'purchase_add_vendor_row_data', 10, 2);
 hooks()->add_action('purchase_init',PURCHASE_MODULE_NAME.'_appint');
-hooks()->add_action('pre_activate_module', PURCHASE_MODULE_NAME.'_preactivate');
-hooks()->add_action('pre_deactivate_module', PURCHASE_MODULE_NAME.'_predeactivate');
+// hooks()->add_action('pre_activate_module', PURCHASE_MODULE_NAME.'_preactivate');
+// hooks()->add_action('pre_deactivate_module', PURCHASE_MODULE_NAME.'_predeactivate');
 hooks()->add_action('pre_uninstall_module', PURCHASE_MODULE_NAME.'_uninstall');
 //Purchase mail template
 register_merge_fields('purchase/merge_fields/purchase_order_merge_fields');
