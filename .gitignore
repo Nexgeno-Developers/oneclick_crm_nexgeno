@@ -17,11 +17,10 @@ yarn-error.log
 ci_sessions/
 /ci_sessions/
 
-# Temp
+# Temp (Perfex temporary folder)
 /temp/*
 !/temp/index.html
 !/temp/.htaccess
-/temfile/
 
 # Installation directories (Perfex CRM setup folders)
 /install/
