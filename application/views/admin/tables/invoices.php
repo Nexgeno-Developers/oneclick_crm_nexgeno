@@ -67,7 +67,10 @@ return App_table::find('invoices')
             @$this->ci->db->query('SET SQL_BIG_SELECTS=1');
         }
 
-        $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, [
+        // Ensure GROUP_CONCAT has sufficient buffer for invoices with large passenger manifests (50+ pax)
+        @$this->ci->db->query('SET SESSION group_concat_max_len = 1048576');
+
+        $additionalSelect = [
             db_prefix() . 'invoices.id',
             db_prefix() . 'invoices.clientid',
             db_prefix() . 'currencies.name as currency_name',
@@ -76,7 +79,12 @@ return App_table::find('invoices')
             'hash',
             'recurring',
             'deleted_customer_name',
-        ]);
+            '(SELECT GROUP_CONCAT(CONCAT_WS(" ", ' . db_prefix() . 'itemable.description, ' . db_prefix() . 'itemable.long_description) SEPARATOR " ") FROM ' . db_prefix() . 'itemable WHERE ' . db_prefix() . 'itemable.rel_id = ' . db_prefix() . 'invoices.id AND ' . db_prefix() . 'itemable.rel_type = "invoice") as item_search_data',
+        ];
+
+        $additionalSelect = hooks()->apply_filters('invoices_table_additional_select', $additionalSelect);
+
+        $result = data_tables_init($aColumns, $sIndexColumn, $sTable, $join, $where, $additionalSelect);
         $output  = $result['output'];
         $rResult = $result['rResult'];
 
