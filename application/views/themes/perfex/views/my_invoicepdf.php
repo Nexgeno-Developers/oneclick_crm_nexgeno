@@ -179,17 +179,33 @@ if ($signature_src == '' && file_exists($signature_path)) {
 // Company logo — draw with Image() (HTML <img> fails on many prod hosts)
 $logo_file = '';
 $companyUploadPath = get_upload_path_by_type('company');
-if (get_option('company_logo_dark') != '' && file_exists($companyUploadPath . get_option('company_logo_dark'))) {
+if (file_exists($assets_path . 'logo.png')) {
+    $logo_file = $assets_path . 'logo.png';
+} elseif (file_exists($companyUploadPath . 'oneclicklogo_trimmed.png')) {
+    $logo_file = $companyUploadPath . 'oneclicklogo_trimmed.png';
+} elseif (file_exists($companyUploadPath . 'oneclicklogo.png')) {
+    $logo_file = $companyUploadPath . 'oneclicklogo.png';
+} elseif (get_option('company_logo_dark') != '' && file_exists($companyUploadPath . get_option('company_logo_dark'))) {
     $logo_file = $companyUploadPath . get_option('company_logo_dark');
 } elseif (get_option('company_logo') != '' && file_exists($companyUploadPath . get_option('company_logo'))) {
     $logo_file = $companyUploadPath . get_option('company_logo');
 }
-$logo_w_mm = (float) get_option('pdf_logo_width');
-if ($logo_w_mm <= 0 || $logo_w_mm > 55) {
-    $logo_w_mm = 42; // ~120px equivalent in mm for TCPDF Image()
-} elseif ($logo_w_mm > 70) {
-    // Option is stored as px in Perfex — convert roughly to mm
-    $logo_w_mm = min(50, $logo_w_mm * 0.35);
+
+// Auto-trim transparent padding if possible
+if (!empty($logo_file) && file_exists($logo_file) && !strpos($logo_file, '_trimmed')) {
+    $prepared_logo = oneclick_pdf_prepare_image($logo_file, true);
+    if (!empty($prepared_logo) && file_exists($prepared_logo)) {
+        $logo_file = $prepared_logo;
+    }
+}
+
+$logo_w_mm = 37;
+$opt_logo_w = (float) get_option('pdf_logo_width');
+if ($opt_logo_w >= 25 && $opt_logo_w <= 45) {
+    $logo_w_mm = $opt_logo_w;
+} elseif ($opt_logo_w > 45) {
+    // If stored as px in Perfex (e.g. 120-150px), scale down proportionally
+    $logo_w_mm = min(40, max(34, $opt_logo_w * 0.25));
 }
 
 $invoice_title = _l('invoice_pdf_heading');
@@ -222,8 +238,18 @@ foreach ($pdf_custom_fields as $field) {
 }
 $info_right .= '</div>';
 
+// Start at Y=8 to remove excessive blank space above logo
+$pdf->SetY(8);
 $header_start_y = $pdf->getY();
 $half_w         = $available_width / 2;
+
+$logo_h_mm = 18;
+if ($logo_file != '' && file_exists($logo_file)) {
+    $logo_size = @getimagesize($logo_file);
+    if ($logo_size && !empty($logo_size[0]) && !empty($logo_size[1])) {
+        $logo_h_mm = ($logo_w_mm / $logo_size[0]) * $logo_size[1];
+    }
+}
 
 if ($swap == '1') {
     $pdf->writeHTMLCell($half_w, '', $dimensions['lm'], $header_start_y, $info_right, 0, 0, false, true, 'L', true);
@@ -237,15 +263,8 @@ if ($swap == '1') {
     $pdf->writeHTMLCell($half_w, '', $dimensions['lm'] + $half_w, $header_start_y, $info_right, 0, 0, false, true, 'R', true);
 }
 
-$logo_h_mm = 18;
-if ($logo_file != '' && file_exists($logo_file)) {
-    $logo_size = @getimagesize($logo_file);
-    if ($logo_size && !empty($logo_size[0]) && !empty($logo_size[1])) {
-        $logo_h_mm = ($logo_w_mm / $logo_size[0]) * $logo_size[1];
-    }
-}
-$pdf->SetY(max($pdf->getY(), $header_start_y + $logo_h_mm + 2));
-$pdf->Ln(3);
+// Position next section tightly below the header block
+$pdf->SetY($header_start_y + $logo_h_mm + 2);
 
 // Build compact company block — background ends just after email
 $company_lines = [];
