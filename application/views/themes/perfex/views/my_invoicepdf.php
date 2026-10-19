@@ -32,7 +32,11 @@ if (!function_exists('oneclick_pdf_prepare_image')) {
      */
     function oneclick_pdf_prepare_image($path, $preserve_alpha = false)
     {
-        if (empty($path) || !file_exists($path) || !extension_loaded('gd')) {
+        if (empty($path) || !file_exists($path)) {
+            return '';
+        }
+
+        if (!extension_loaded('gd')) {
             return $path;
         }
 
@@ -161,26 +165,49 @@ if (!function_exists('oneclick_pdf_prepare_image')) {
 $scanner_src   = oneclick_pdf_prepare_image($scanner_path);
 $stamp_src     = oneclick_pdf_prepare_image($stamp_path, true);
 $signature_src = oneclick_pdf_prepare_image($signature_path, true);
+// Prefer original assets on disk (more reliable on shared hosting than /tmp)
+if (file_exists($scanner_path)) {
+    $scanner_src = $scanner_path;
+}
+if ($stamp_src == '' && file_exists($stamp_path)) {
+    $stamp_src = $stamp_path;
+}
+if ($signature_src == '' && file_exists($signature_path)) {
+    $signature_src = $signature_path;
+}
 
-// Prefer trimmed local logo so top aligns with invoice details
-$logo_html = '';
-$companyUploadPath = get_upload_path_by_type('company');
+// Company logo — draw with Image() (HTML <img> fails on many prod hosts)
 $logo_file = '';
-if (get_option('company_logo_dark') != '' && file_exists($companyUploadPath . get_option('company_logo_dark'))) {
+$companyUploadPath = get_upload_path_by_type('company');
+if (file_exists($assets_path . 'logo.png')) {
+    $logo_file = $assets_path . 'logo.png';
+} elseif (file_exists($companyUploadPath . 'oneclicklogo_trimmed.png')) {
+    $logo_file = $companyUploadPath . 'oneclicklogo_trimmed.png';
+} elseif (file_exists($companyUploadPath . 'oneclicklogo.png')) {
+    $logo_file = $companyUploadPath . 'oneclicklogo.png';
+} elseif (get_option('company_logo_dark') != '' && file_exists($companyUploadPath . get_option('company_logo_dark'))) {
     $logo_file = $companyUploadPath . get_option('company_logo_dark');
 } elseif (get_option('company_logo') != '' && file_exists($companyUploadPath . get_option('company_logo'))) {
     $logo_file = $companyUploadPath . get_option('company_logo');
 }
-$logo_src = oneclick_pdf_prepare_image($logo_file);
-$logo_w   = get_option('pdf_logo_width');
-if ($logo_w == '' || (int) $logo_w > 130) {
-    $logo_w = 120;
+
+// Auto-trim transparent padding if possible
+if (!empty($logo_file) && file_exists($logo_file) && !strpos($logo_file, '_trimmed')) {
+    $prepared_logo = oneclick_pdf_prepare_image($logo_file, true);
+    if (!empty($prepared_logo) && file_exists($prepared_logo)) {
+        $logo_file = $prepared_logo;
+    }
 }
-if ($logo_src != '') {
-    $logo_html = '<img width="' . (int) $logo_w . 'px" src="' . $logo_src . '" />';
-} else {
-    $logo_html = pdf_logo_url();
+
+$logo_w_mm = 37;
+$opt_logo_w = (float) get_option('pdf_logo_width');
+if ($opt_logo_w >= 25 && $opt_logo_w <= 45) {
+    $logo_w_mm = $opt_logo_w;
+} elseif ($opt_logo_w > 45) {
+    // If stored as px in Perfex (e.g. 120-150px), scale down proportionally
+    $logo_w_mm = min(40, max(34, $opt_logo_w * 0.25));
 }
+
 $invoice_title = _l('invoice_pdf_heading');
 
 $info_right = '<div style="text-align:right; color:#000; line-height:16px;">';
@@ -211,18 +238,33 @@ foreach ($pdf_custom_fields as $field) {
 }
 $info_right .= '</div>';
 
-// Top-align logo and invoice details on the same row
-$left_html  = $swap == '1' ? $info_right : $logo_html;
-$right_html = $swap == '1' ? $logo_html : $info_right;
+// Start at Y=8 to remove excessive blank space above logo
+$pdf->SetY(8);
+$header_start_y = $pdf->getY();
+$half_w         = $available_width / 2;
 
-$header_html = '<table cellpadding="0" cellspacing="0" style="width:100%; border-collapse:collapse;">';
-$header_html .= '<tr>';
-$header_html .= '<td width="50%" style="vertical-align:top;">' . $left_html . '</td>';
-$header_html .= '<td width="50%" style="vertical-align:top; text-align:right;">' . $right_html . '</td>';
-$header_html .= '</tr></table>';
+$logo_h_mm = 18;
+if ($logo_file != '' && file_exists($logo_file)) {
+    $logo_size = @getimagesize($logo_file);
+    if ($logo_size && !empty($logo_size[0]) && !empty($logo_size[1])) {
+        $logo_h_mm = ($logo_w_mm / $logo_size[0]) * $logo_size[1];
+    }
+}
 
-$pdf->writeHTML($header_html, true, false, false, false, '');
-$pdf->Ln(3);
+if ($swap == '1') {
+    $pdf->writeHTMLCell($half_w, '', $dimensions['lm'], $header_start_y, $info_right, 0, 0, false, true, 'L', true);
+    if ($logo_file != '' && file_exists($logo_file)) {
+        $pdf->Image($logo_file, $dimensions['lm'] + $half_w + 5, $header_start_y, $logo_w_mm, 0, '', '', '', false, 300, '', false, false, 0);
+    }
+} else {
+    if ($logo_file != '' && file_exists($logo_file)) {
+        $pdf->Image($logo_file, $dimensions['lm'], $header_start_y, $logo_w_mm, 0, '', '', '', false, 300, '', false, false, 0);
+    }
+    $pdf->writeHTMLCell($half_w, '', $dimensions['lm'] + $half_w, $header_start_y, $info_right, 0, 0, false, true, 'R', true);
+}
+
+// Position next section tightly below the header block
+$pdf->SetY($header_start_y + $logo_h_mm + 2);
 
 // Build compact company block — background ends just after email
 $company_lines = [];
@@ -257,10 +299,7 @@ $company_lines[] = '<b>Email:</b> ' . $company_email . ' &nbsp;&nbsp; <b>Web:</b
 $company_info = implode('<br />', $company_lines);
 
 $client_info_html = format_customer_info($invoice, 'invoice', 'billing');
-if ($invoice->include_shipping == 1 && $invoice->show_shipping_on_invoice == 1) {
-    $client_info_html .= '<br /><b>' . _l('ship_to') . ':</b><br />';
-    $client_info_html .= format_customer_info($invoice, 'invoice', 'shipping');
-}
+// Shipping address intentionally omitted from PDF
 
 // Primary contact phone & email on Bill To
 $primary_contact_id = get_primary_contact_user_id($invoice->clientid);
@@ -305,7 +344,8 @@ $info_boxes .= '</tr>';
 $info_boxes .= '</table>';
 
 $pdf->writeHTML($info_boxes, true, false, false, false, '');
-$pdf->Ln(4);
+// Reduce space between customer detail boxes and items table header
+$pdf->SetY($pdf->getY() - 1.5);
 
 $items   = get_items_table_data($invoice, 'invoice', 'pdf');
 $tblhtml = $items->table();
@@ -317,8 +357,85 @@ $heading_text = get_option('pdf_table_heading_text_color');
 if (!empty($heading_text)) {
     $tblhtml = str_replace('color:' . $heading_text, 'color:#ffffff', $tblhtml);
 }
-$pdf->writeHTML($tblhtml, true, false, false, false, '');
-$pdf->Ln(4);
+
+// Add white column separator lines between header cells, with black borders on outer left (#) and outer right (Amount)
+$tblhtml = preg_replace('/<th\b([^>]*)>/i', '<th$1 style="border-right:1px solid #ffffff;">', $tblhtml);
+$tblhtml = preg_replace('/style="([^"]*)"\s+style="([^"]*)"/i', 'style="$1 $2"', $tblhtml);
+$tblhtml = preg_replace('/(<tr\b[^>]*>\s*<th\b[^>]*\bstyle=")/i', '${1}border-left:1px solid #000000; ', $tblhtml);
+$tblhtml = preg_replace('/(<th\b[^>]*\bstyle="[^"]*border-right:\s*1px\s+solid\s+)#ffffff([^"]*"[^>]*>(?:(?!<th).)*?<\/th>\s*<\/tr>)/is', '${1}#000000${2}', $tblhtml);
+
+// Extend last column (Amount) so total column widths equal 100% (Perfex defaults sum to 99%)
+preg_match_all('/<th\b[^>]*width=["\']([0-9.]+)[^"\']*["\']/i', $tblhtml, $w_matches);
+if (!empty($w_matches[1])) {
+    $total_w = array_sum($w_matches[1]);
+    if ($total_w > 0 && $total_w < 100) {
+        $diff = 100 - $total_w;
+        $last_w = (float) end($w_matches[1]);
+        $new_last_w = $last_w + $diff;
+
+        $tblhtml = preg_replace('/(<th\b[^>]*\bwidth=["\'])([0-9.]+)[^"\']*([\'"][^>]*>(?:(?!<th).)*?<\/th>\s*<\/tr>)/is', '${1}' . $new_last_w . '%${3}', $tblhtml);
+        $tblhtml = preg_replace('/(<td\b[^>]*\bwidth=["\'])([0-9.]+)[^"\']*([\'"][^>]*>(?:(?!<td).)*?<\/td>\s*<\/tr>)/is', '${1}' . $new_last_w . '%${3}', $tblhtml);
+    }
+}
+
+// Add black vertical column lines to body cells (without horizontal row border lines)
+$tblhtml = preg_replace('/<td\b([^>]*)>/i', '<td$1 style="border-right:1px solid #000000;">', $tblhtml);
+$tblhtml = preg_replace('/style="([^"]*)"\s+style="([^"]*)"/i', 'style="$1 $2"', $tblhtml);
+$tblhtml = preg_replace('/(<tr\b[^>]*>\s*<td\b[^>]*\bstyle=")/i', '${1}border-left:1px solid #000000; ', $tblhtml);
+
+// Add left and right outer borders to the table
+$tblhtml = str_replace('<table ', '<table style="border-collapse:collapse; border-left:1px solid #000000; border-right:1px solid #000000;" ', $tblhtml);
+
+// Set line style and draw color to solid black before rendering table
+$pdf->SetDrawColor(0, 0, 0);
+$pdf->SetLineStyle([
+    'width' => 0.25,
+    'cap'   => 'butt',
+    'join'  => 'miter',
+    'dash'  => 0,
+    'color' => [0, 0, 0],
+]);
+
+// Render the unified table with ln=false so headers repeat on page breaks and stops at exact bottom of cells
+$start_page = $pdf->getPage();
+$pdf->writeHTML($tblhtml, false, false, false, false, '');
+$items_end_y = $pdf->getY();
+$end_page    = $pdf->getPage();
+
+// Extract column widths from thead (robust to Perfex's 5%; semicolon formatting)
+preg_match_all('/<th\b[^>]*width=["\']([0-9.]+)[^"\']*["\']/i', $tblhtml, $matches);
+$col_x = [];
+$cur_x = $dimensions['lm'];
+$col_x[] = $cur_x;
+if (!empty($matches[1])) {
+    foreach ($matches[1] as $w) {
+        $cur_x += ($available_width * ((float)$w / 100));
+        $col_x[] = $cur_x;
+    }
+}
+$col_x[count($col_x) - 1] = $dimensions['lm'] + $available_width;
+
+$payment_block_h = 46;
+$terms_block_h   = 34;
+$gap_between     = 1.5;
+$bottom_pad      = 3;
+$page_h          = $pdf->getPageHeight();
+$block_start     = $page_h - $payment_block_h - $gap_between - $terms_block_h - $bottom_pad;
+$note_reserve    = !empty($invoice->clientnote) ? 14 : 0;
+$target_bottom_y = $block_start - $note_reserve - 3;
+
+// If table ends above Bank Details, extend column lines down to just above Bank Details
+if ($items_end_y < $target_bottom_y) {
+    foreach ($col_x as $x) {
+        $pdf->Line($x, $items_end_y, $x, $target_bottom_y);
+    }
+    $pdf->Line($dimensions['lm'], $target_bottom_y, $dimensions['lm'] + $available_width, $target_bottom_y);
+    $pdf->SetY($target_bottom_y);
+} else {
+    // Multi-page or full page: close table with the bottom horizontal line
+    $pdf->Line($dimensions['lm'], $items_end_y, $dimensions['lm'] + $available_width, $items_end_y);
+    $pdf->SetY($items_end_y);
+}
 
 $tbltotal = '<table cellpadding="5" cellspacing="0" style="font-size:' . ($font_size + 3) . 'px; border-collapse:collapse;">';
 $tbltotal .= '<tr>
@@ -385,10 +502,8 @@ $tbltotal .= '</table>';
 
 $scanner_html = '<table cellpadding="3" cellspacing="0" style="width:100%; text-align:center;">';
 $scanner_html .= '<tr><td style="font-size:10px; color:#000;"><b>SCAN TO PAY</b></td></tr>';
-if ($scanner_src != '') {
-    $scanner_html .= '<tr><td><img src="' . $scanner_src . '" width="88" /></td></tr>';
-}
-$scanner_html .= '<tr><td style="font-size:9px;"><b>UPI ID</b><br />' . $upi_id . '</td></tr>';
+// Reserve space for QR + UPI label — both drawn after writeHTML (HTML img often fails on prod)
+$scanner_html .= '<tr><td style="height:110px;">&nbsp;</td></tr>';
 $scanner_html .= '</table>';
 
 $bank_html = '<table cellpadding="6" cellspacing="0" style="width:100%; background-color:' . $brand_light . '; border-collapse:collapse;">';
@@ -420,59 +535,20 @@ if (!empty($invoice->clientnote)) {
     $pdf->writeHTMLCell('', '', '', '', $invoice->clientnote, 0, 1, false, true, 'L', true);
 }
 
-if (count($invoice->payments) > 0 && get_option('show_transactions_on_invoice_pdf') == 1) {
-    $pdf->Ln(4);
-    $line = 'border-bottom-color:#000000;border-bottom-width:1px;border-bottom-style:solid;';
-    $pdf->SetFont($font_name, 'B', $font_size);
-    $pdf->Cell(0, 0, _l('invoice_received_payments') . ':', 0, 1, 'L', 0, '', 0);
-    $pdf->SetFont($font_name, '', $font_size);
-    $pdf->Ln(2);
-    $payhtml = '<table width="100%" cellspacing="0" cellpadding="5" border="0">
-        <tr style="color:#000;">
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_number_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_mode_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_date_heading') . '</th>
-        <th width="25%" style="' . $line . '">' . _l('invoice_payments_table_amount_heading') . '</th>
-    </tr>';
-    foreach ($invoice->payments as $payment) {
-        $payment_name = $payment['name'];
-        if (!empty($payment['paymentmethod'])) {
-            $payment_name .= ' - ' . $payment['paymentmethod'];
-        }
-        $payhtml .= '<tr>
-            <td>' . $payment['paymentid'] . '</td>
-            <td>' . $payment_name . '</td>
-            <td>' . _d($payment['date']) . '</td>
-            <td>' . app_format_money($payment['amount'], $invoice->currency_name) . '</td>
-        </tr>';
-    }
-    $payhtml .= '</table>';
-    $pdf->writeHTML($payhtml, true, false, false, false, '');
-}
+// Transactions / payments table intentionally omitted from invoice PDF
 
-if (found_invoice_mode($payment_modes, $invoice->id, true, true)) {
-    $pdf->Ln(3);
-    $pdf->SetFont($font_name, 'B', $font_size);
-    $pdf->Cell(0, 0, _l('invoice_html_offline_payment') . ':', 0, 1, 'L', 0, '', 0);
-    $pdf->SetFont($font_name, '', $font_size);
+// Skip Perfex offline payment modes — bank details are already in the custom BANK DETAILS box
 
-    foreach ($payment_modes as $mode) {
-        if (is_numeric($mode['id'])) {
-            if (!is_payment_mode_allowed_for_invoice($mode['id'], $invoice->id)) {
-                continue;
-            }
-        }
-        if (isset($mode['show_on_pdf']) && $mode['show_on_pdf'] == 1) {
-            $pdf->Ln(1);
-            $pdf->Cell(0, 0, $mode['name'], 0, 1, 'L', 0, '', 0);
-            $pdf->Ln(1);
-            $pdf->writeHTMLCell('', '', '', '', $mode['description'], 0, 1, false, true, 'L', true);
-        }
-    }
-}
+$default_terms = "CASH CHEQUE CHEQUE VERY IMP. : Payment to be made to the cashier & printed Official Receipt must be obtained.<br />"
+    . ": All cheques / demand drafts in payment of bills must be crossed 'A/c Payee Only'<br />"
+    . ": and drawn in favour of 'ONE CLICK TRAVEL'.<br />"
+    . "LATE PAYMENT : Interest @ 24% per annum will be charged on all outstanding bills after due date.<br />"
+    . ": Kindly check all details carefully to avoid un-necessary complications.";
 
 $terms = !empty($invoice->terms) ? $invoice->terms : get_option('predefined_terms_invoice');
-if (!empty($terms) && strip_tags($terms) === $terms) {
+if (trim(strip_tags((string) $terms)) == '') {
+    $terms = $default_terms;
+} elseif (strip_tags($terms) === $terms) {
     $terms = nl2br($terms);
 }
 
@@ -487,7 +563,7 @@ $sign_gap   = $available_width * 0.02;
 $col_w      = $sign_w / 2;
 $stamp_w    = 18;
 $sign_img_w = 16;
-$payment_block_h = 42;
+$payment_block_h = 46;
 $terms_block_h   = 34;
 $gap_between     = 1.5;
 $bottom_pad      = 3;
@@ -501,6 +577,29 @@ if ($pdf->getY() > ($block_start - 2)) {
 $pdf->SetAutoPageBreak(false);
 $pdf->SetY($block_start);
 $pdf->writeHTML($payment_row, true, false, false, false, '');
+
+// Draw QR + UPI ID with Image()/Cell — avoids HTML overlap (works on prod)
+$y_after_payment = $pdf->getY();
+$scanner_col_x = $dimensions['lm'] + ($available_width * 0.42);
+$scanner_col_w = $available_width * 0.22;
+$scanner_img_w = 20;
+$scanner_img_x = $scanner_col_x + (($scanner_col_w - $scanner_img_w) / 2);
+$scanner_img_y = $block_start + 5.5;
+if ($scanner_src != '' && file_exists($scanner_src)) {
+    $pdf->Image($scanner_src, $scanner_img_x, $scanner_img_y, $scanner_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+}
+$upi_label_y = $scanner_img_y + $scanner_img_w + 1.5;
+$pdf->SetXY($scanner_col_x, $upi_label_y);
+$pdf->SetFont($font_name, 'B', 8);
+$pdf->Cell($scanner_col_w, 3.5, 'UPI ID', 0, 2, 'C', false, '', 0, false, 'T', 'M');
+// Wider than QR column + slight scale so full UPI stays on one line
+$upi_text_w = $scanner_col_w + 16;
+$upi_text_x = $scanner_col_x + (($scanner_col_w - $upi_text_w) / 2);
+$pdf->SetFont($font_name, '', 6.5);
+$pdf->SetXY($upi_text_x, $pdf->getY());
+$pdf->Cell($upi_text_w, 3.2, $upi_id, 0, 1, 'C', false, '', 1);
+$pdf->SetY($y_after_payment);
+$pdf->SetFont($font_name, '', $font_size);
 
 if (get_option('total_to_words_enabled') == 1) {
     $pdf->SetFont($font_name, 'B', $font_size);
@@ -520,22 +619,22 @@ $sign_x = $dimensions['lm'] + $terms_w + $sign_gap;
 
 $pdf->writeHTMLCell($terms_w, '', $dimensions['lm'], $footer_y, $terms_html, 0, 0, false, true, 'LT', true);
 
-// Single approval block: stamp + signature, then Sameer Khan
+// Single approval block: signature then stamp, then Sameer Khan
 $pdf->SetXY($sign_x, $footer_y);
 $pdf->SetFont($font_name, 'B', 6.5);
 $pdf->MultiCell($sign_w, 3.2, 'CHECKED AND APPROVED BY', 0, 'C', false, 1);
 
 $img_y = $pdf->getY() + 0.5;
-// Side by side, very close
+// Side by side, very close: signature then stamp
 $pair_gap = 1;
-$pair_w   = $stamp_w + $pair_gap + $sign_img_w;
+$pair_w   = $sign_img_w + $pair_gap + $stamp_w;
 $pair_x   = $sign_x + (($sign_w - $pair_w) / 2);
 
-if ($stamp_src != '' && file_exists($stamp_src)) {
-    $pdf->Image($stamp_src, $pair_x, $img_y, $stamp_w, 0, '', '', '', false, 300, '', false, false, 0);
-}
 if ($signature_src != '' && file_exists($signature_src)) {
-    $pdf->Image($signature_src, $pair_x + $stamp_w + $pair_gap, $img_y + 1.5, $sign_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+    $pdf->Image($signature_src, $pair_x, $img_y + 1.5, $sign_img_w, 0, '', '', '', false, 300, '', false, false, 0);
+}
+if ($stamp_src != '' && file_exists($stamp_src)) {
+    $pdf->Image($stamp_src, $pair_x + $sign_img_w + $pair_gap, $img_y, $stamp_w, 0, '', '', '', false, 300, '', false, false, 0);
 }
 
 $name_y = $img_y + max($stamp_w, 12) + 1;
@@ -546,3 +645,41 @@ $pdf->SetX($sign_x);
 $pdf->SetFont($font_name, '', 6.5);
 $pdf->Cell($sign_w, 3, 'Managing Director', 0, 1, 'C', false);
 $pdf->SetFont($font_name, '', $font_size);
+
+// Watermark: company logo enlarged in the center of each page with transparency
+if ($logo_file != '' && file_exists($logo_file)) {
+    $wm_w = 115;
+    $logo_size = @getimagesize($logo_file);
+    if (!empty($logo_size[0]) && !empty($logo_size[1])) {
+        $aspect = $logo_size[0] / $logo_size[1];
+        if ($aspect < 0.8) {
+            $wm_h = 100;
+            $wm_w = $wm_h * $aspect;
+        } else {
+            $wm_w = 115;
+            $wm_h = $wm_w / $aspect;
+        }
+    } else {
+        $wm_w = 115;
+        $wm_h = 35;
+    }
+
+    $num_pages = $pdf->getNumPages();
+    $orig_page = $pdf->getPage();
+
+    for ($p = 1; $p <= $num_pages; $p++) {
+        $pdf->setPage($p);
+        $p_dim = $pdf->getPageDimensions();
+        $p_w   = $p_dim['wk'];
+        $p_h   = $p_dim['hk'];
+        $wm_x  = ($p_w - $wm_w) / 2;
+        $wm_y  = ($p_h - $wm_h) / 2;
+
+        $pdf->SetAlpha(0.10);
+        $pdf->Image($logo_file, $wm_x, $wm_y, $wm_w, $wm_h, '', '', '', false, 300, '', false, false, 0);
+        $pdf->SetAlpha(1.0);
+    }
+
+    $pdf->setPage($orig_page);
+}
+
