@@ -170,9 +170,10 @@ For any feature request, task, or bug fix:
 2. **NEVER Push Automatically:**
    - The AI agent must **NEVER** execute `git push` autonomously.
    - The developer / user will review the committed changes and push the branch themselves, or must give an explicit, intentional command before any push is performed.
-3. **NEVER Merge Automatically:**
+3. **NEVER Merge Automatically & ALWAYS Enforce `--no-ff` Merges:**
    - The AI agent must **NEVER** merge feature branches into `main` automatically.
    - All merges must occur via a Pull Request (PR) on GitHub, or only after the user explicitly commands a local merge.
+   - **MANDATORY `--no-ff`**: Whenever a local merge is explicitly instructed by the user, it **MUST ALWAYS use the `--no-ff` flag** (`git merge --no-ff <branch_name>`). Fast-forward merges (`--ff`, `--ff-only`) are strictly forbidden so that a dedicated merge commit is always generated, preserving branch history and enabling clean audits/reverts.
 
 ---
 

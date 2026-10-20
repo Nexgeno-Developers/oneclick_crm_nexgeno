@@ -15,7 +15,7 @@ This skill provides an all-in-one, structured engineering lifecycle for Perfex C
 3. **Strict Git Workflow:**
    - **Always develop in a new task branch** (`feat/...`, `fix/...`, `chore/...`).
    - **NEVER push automatically.** The user reviews and pushes.
-   - **NEVER merge automatically.** Merges must go through a Pull Request or be explicitly instructed by the user.
+   - **NEVER merge automatically.** Merges must go through a Pull Request or be explicitly instructed by the user, and **must always use `--no-ff`** (`git merge --no-ff <branch_name>`). Fast-forward merges are strictly forbidden.
 
 ---
 
