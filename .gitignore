@@ -1,8 +1,20 @@
-# Local credentials and encryption key
+# ==============================================================================
+# PERFEX CRM - STANDARD PRODUCTION & DEVELOPMENT .GITIGNORE
+# Universal template for all Nexgeno Perfex CRM projects
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# 1. Local Credentials & Database Configuration (NEVER COMMIT)
+# ------------------------------------------------------------------------------
 /application/config/app-config.php
 /application/config/app-config.php.bak
+/application/config/app-config.php.*
+.env
+.env.*
 
-# Logs and cache
+# ------------------------------------------------------------------------------
+# 2. Logs, Cache & Error Output
+# ------------------------------------------------------------------------------
 /application/logs/*
 !/application/logs/index.html
 /application/cache/*
@@ -12,52 +24,108 @@ error_log
 *.log
 npm-debug.log*
 yarn-error.log
+pnpm-debug.log*
 
-# CodeIgniter session files
+# ------------------------------------------------------------------------------
+# 3. CodeIgniter Sessions & Temporary Files
+# ------------------------------------------------------------------------------
 ci_sessions/
 /ci_sessions/
-
-# Temp (Perfex temporary folder)
 /temp/*
 !/temp/index.html
 !/temp/.htaccess
 /temfile/
+/tmp/
 
-# Installation directories (Perfex CRM setup folders)
+# ------------------------------------------------------------------------------
+# 4. Installation & Setup Directories (Security Hazard in Production)
+# ------------------------------------------------------------------------------
 /install/
 /install*/
 
-# Uploads: keep folder structure, ignore uploaded files
+# ------------------------------------------------------------------------------
+# 5. User Uploads & Media Files (Preserve structure, ignore customer data)
+# ------------------------------------------------------------------------------
 /uploads/**
 !/uploads/**/
 !/uploads/**/index.html
 !/uploads/**/.htaccess
 
-# Module uploads
+# Module-specific uploads
 /modules/*/uploads/**
 !/modules/*/uploads/**/
 !/modules/*/uploads/**/index.html
+!/modules/*/uploads/**/.htaccess
 
-# Local backups, archives, database dumps, and data spreadsheets
+# Perfex Media Manager
+/media/**
+!/media/**/
+!/media/**/index.html
+
+# ------------------------------------------------------------------------------
+# 6. Database Backups, SQL Dumps & Spreadsheets
+# ------------------------------------------------------------------------------
 *.sql
 !/backups/*.sql
 *.zip
+*.tar
 *.tar.gz
+*.gz
+*.7z
+*.rar
 *.xlsx
 *.xls
+*.csv
 
-# Lock files (preserve composer.lock & package-lock.json for consistent builds)
+# ------------------------------------------------------------------------------
+# 7. Dependencies & Vendor Directories
+# ------------------------------------------------------------------------------
+# Ignore core Composer vendor (installed on server / managed via composer)
+/application/vendor/
+# Allow standalone custom module vendor directories if packaged together
+!/modules/*/vendor/
+/node_modules/
+
+# Lock files (Keep composer.lock & package-lock.json for reproducible builds)
 *.lock
 !composer.lock
 !package-lock.json
 
-# Local server / htaccess backups
+# ------------------------------------------------------------------------------
+# 8. Server & Deployment Overrides
+# ------------------------------------------------------------------------------
 /.htaccess.*
 
-# Dependencies and OS
-/application/vendor/
-/node_modules
+# ------------------------------------------------------------------------------
+# 9. Operating System & IDE / Editor Artifacts
+# ------------------------------------------------------------------------------
 .DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
 Thumbs.db
+desktop.ini
 
-# Note: .agents/ is intentionally NOT ignored so team skills, prompts, and MCP configurations are tracked.
+# IDEs
+.idea/
+*.sublime-project
+*.sublime-workspace
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+!.vscode/launch.json
+
+# AI Assistant Scratch & Worktree Directories (Prevent rogue worktrees)
+.kilo/
+.cursor/
+scratch/
+
+# ------------------------------------------------------------------------------
+# 10. AI Agents & Team Standards (ALWAYS TRACKED)
+# ------------------------------------------------------------------------------
+# Explicitly ensure team skills, agent rules, and AGENTS.md are tracked across all forks
+!.agents/
+!.agents/**
+!AGENTS.md
