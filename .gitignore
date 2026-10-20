@@ -21,6 +21,7 @@ ci_sessions/
 /temp/*
 !/temp/index.html
 !/temp/.htaccess
+/temfile/
 
 # Installation directories (Perfex CRM setup folders)
 /install/
@@ -54,9 +55,9 @@ ci_sessions/
 /.htaccess.*
 
 # Dependencies and OS
+/application/vendor/
 /node_modules
 .DS_Store
 Thumbs.db
 
 # Note: .agents/ is intentionally NOT ignored so team skills, prompts, and MCP configurations are tracked.
-
