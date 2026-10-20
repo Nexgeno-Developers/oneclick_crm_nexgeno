@@ -17,7 +17,7 @@
 
 ---
 
-## 2. The 7 Non-Negotiable AI Directives
+## 2. The 8 Non-Negotiable AI Directives
 
 ### 🛡️ Directive 1: Core Protection (Zero Core Modifications)
 - **NEVER** modify files inside:
@@ -163,19 +163,34 @@ For any feature request, task, or bug fix:
 
 ---
 
-## 3. Specialized Sub-Roles (Skills Available in `.agents/skills/`)
-
-When working on specific phases of a task, adopt the appropriate persona:
-
-1. **`perfex-crm-project-manager`**
-   - **When to use:** In the initial phase of any feature request or architectural overhaul.
-   - **Goal:** Produces detailed implementation plans, identifies risks, defines database requirements, and maps out dependencies.
-2. **`perfex-crm-senior-developer`**
-   - **When to use:** During code implementation and refactoring.
-   - **Goal:** Delivers modular, PSR-compliant, secure, and hook-driven CodeIgniter/PHP code with installation/migration SQL.
-3. **`perfex-crm-qa-tester`**
-   - **When to use:** After code changes or before releases.
-   - **Goal:** Actively attempts to break custom modules, tests permission boundaries, probes for SQLi/XSS/CSRF/IDOR, and checks for regression.
+### 🌿 Directive 8: Strict Git Branching, Push & PR Safety (CRITICAL)
+1. **Branch-First Rule:**
+   - **ALWAYS** create or suggest a dedicated task branch (`feat/...`, `fix/...`, `chore/...`) before starting any development or refactoring.
+   - **NEVER** write or commit new feature code directly on `main`.
+2. **NEVER Push Automatically:**
+   - The AI agent must **NEVER** execute `git push` autonomously.
+   - The developer / user will review the committed changes and push the branch themselves, or must give an explicit, intentional command before any push is performed.
+3. **NEVER Merge Automatically & ALWAYS Enforce `--no-ff` Merges:**
+   - The AI agent must **NEVER** merge feature branches into `main` automatically.
+   - All merges must occur via a Pull Request (PR) on GitHub, or only after the user explicitly commands a local merge.
+   - **MANDATORY `--no-ff`**: Whenever a local merge is explicitly instructed by the user, it **MUST ALWAYS use the `--no-ff` flag** (`git merge --no-ff <branch_name>`). Fast-forward merges (`--ff`, `--ff-only`) are strictly forbidden so that a dedicated merge commit is always generated, preserving branch history and enabling clean audits/reverts.
 
 ---
-*Document Version: 1.0.0 — Maintained by Nexgeno Engineering Team*
+
+## 3. Unified Skill Flow (`.agents/skills/perfex-crm/`)
+
+Instead of fragmented separate tools, this project uses the unified **`perfex-crm`** skill, which automatically guides any AI through the complete **3-Phase Lifecycle**:
+
+```mermaid
+graph LR
+    A["User Request"] --> B["Phase 1: PM Planning & Hook Discovery"]
+    B --> C["Phase 2: Senior Dev Modular Implementation"]
+    C --> D["Phase 3: QA Security & Regression Audit"]
+```
+
+1. **Phase 1 (PM Planning):** Maps user requirements to Perfex hooks, designs idempotent schema, and defines capabilities.
+2. **Phase 2 (Senior Dev Implementation):** Generates PSR-compliant, secure CodeIgniter modular code using Active Record and Perfex UI helpers.
+3. **Phase 3 (QA & Security Audit):** Actively checks against SQLi, XSS, CSRF, IDOR, verifies permission boundaries, and confirms core module regression safety.
+
+---
+*Document Version: 2.0.0 — Maintained by Nexgeno Engineering Team*
